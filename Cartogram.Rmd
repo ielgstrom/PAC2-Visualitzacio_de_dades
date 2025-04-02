@@ -1,0 +1,110 @@
+---
+title: "PAC2 - Visualització de dades"
+author: "Ignasi Elgström"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/ignasi/Desktop/Master/S2/Visualització de dades/PAC2")
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(mapSpain)
+library(cartogram)
+install.packages("arcdiagram",repos = "https://github.com/gastonstat/arcdiagram")
+library(igraph)
+library(arcdiagram)
+library(gsbm)
+library(missSBM)
+library(RColorBrewer)
+library(reshape)
+```
+<h2>Cartogram</h2>
+
+Per aquesta primera tècnica, es treballa la tècnica del Cartograma, que consisteix en representar un mapa on cada subdivisió d'aquest es veu augmentat o disminuit segons una propietat comú.
+
+En aquest cas, s'agafa el mapa d'Espanya i es crea un Cartogram segons la població de cada Comunitat Autònoma. Les dades venen de la llibreria 'mapSpain' de R.
+
+
+```{r, fig.width=12, fig.height=5}
+# Obtemim les dades geografiques i les transformem segons la projecció de Mercator
+prov <- esp_get_prov() %>%
+  mutate(name = prov.shortname.es) %>%
+  select(name, cpro)
+prov_3857 <- st_transform(prov, 3857)
+
+#Obtenim la població per provincia
+pop_provinces <- pobmun19 %>%
+  group_by(cpro) %>%
+  summarise(n_pop = sum(pob19))
+
+#Adjuntem les dades
+prov_3857_data <- prov_3857 %>%
+  left_join(pop_provinces, by = c("cpro"))
+
+#Fem el plot
+prov_3857_data_cartog_cont <- cartogram_cont(prov_3857_data, weight = "n_pop")
+ggplot(prov_3857_data_cartog_cont) +  geom_sf(aes(fill = n_pop))+  
+  labs(title = "Cartograma de la població per CCAA a Espanya",
+       x = "Longitud",
+       y = "Latitud")
+```
+<h2>Arc diagram</h2>
+
+Aquest plot tracta sobre les relacions entre multiples elements d'un graf, de forma horitzontal i mostrant alhora les conexions en cadascun dels nodes.
+
+En el següent graf es mostra cadascún dels personatges de la novela 'Les Miserables' i cada conexió entre dos nodes/personatge implica que aquest coparteixen un capítol d'un llibre.
+
+```{r, fig.width=12, fig.height=5}
+# Carreguem l'arxiu a analitzar
+mis_file = "lesmiserables.gml"
+mis_graph = read_graph(mis_file, format="gml")
+
+#Obtenim els atributs del graf.
+edgelist = as_edgelist(mis_graph)
+vlabels = vertex_attr(mis_graph, "label")
+vgroups = vertex_attr(mis_graph, "group")
+vfill = vertex_attr(mis_graph, "fill")
+vborders = vertex_attr(mis_graph, "border")
+degrees = degree(mis_graph)
+values = edge_attr(mis_graph, "value")
+
+#Agrupem les dades i les ordenem per grups i distàncies
+x = data.frame(vgroups, degrees, vlabels, ind=1:vcount(mis_graph))
+y = arrange(x, desc(vgroups), desc(degrees))
+new_ord = y$ind
+
+#Fem el plot
+arcplot(edgelist, ordering=new_ord, labels=vlabels, cex.labels=0.8,
+        show.nodes=TRUE, col.nodes=vborders, bg.nodes=vfill,
+        cex.nodes = log(degrees)+0.5, pch.nodes=21,
+        lwd.nodes = 2, line=-0.5,
+        col.arcs = hsv(0, 0, 0.2, 0.25), lwd.arcs = 1.5 * values)
+```
+
+<h2>Connected Scatterplot</h2>
+
+Aquest plot es basa en il·lustrar l'evolució d'una variable X amb segments entre els punts alhora que marcant cada punt. Aquest graf mostra mes clarament els detalls de l'evolució de punts alhora que marca la tendència entre aquests.
+
+En aquest gràfic mostrem una evolució del conjunt de dades 'economics', on s'hi representa el valor de l'atur a EEUU entre el 1995 i el 2000.
+
+
+```{r, fig.width=12, fig.height=5}
+start_date <- as.Date("1995-01-01")
+end_date <- as.Date("2000-01-01")
+
+# Filtrem les dades per data
+filtered_data <- economics %>% 
+  filter(date >= start_date & date <= end_date)
+
+# Fem el plot
+ggplot(filtered_data, aes(x = date, y = unemploy)) +
+  geom_point() +  
+  geom_line() +   
+  scale_x_date() +  # Escala automatica
+  labs(title = "Connected Scatterplot del atur en diferents dates",
+       x = "Data",
+       y = "Atur")
+```
